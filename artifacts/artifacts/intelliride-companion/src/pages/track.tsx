@@ -118,7 +118,9 @@ export function TrackPage() {
                 className="stat-value"
                 data-testid="text-live-speed"
               >
-                {ride.location.speed}
+                {ride.status.ridingState === 'parked'
+  ? 0
+  : Math.round(ride.location.speed)}
                 <span className="stat-unit">kmph</span>
               </div>
 
