@@ -1,0 +1,17 @@
+{
+  "name": "IntelliRide Companion",
+  "short_name": "IntelliRide",
+  "description": "Live rider safety companion for a smart motorcycle helmet.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0E14",
+  "theme_color": "#0B0E14",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

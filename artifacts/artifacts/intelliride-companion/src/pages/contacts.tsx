@@ -1,0 +1,26 @@
+import { useState } from 'react';
+import { Check, Edit3, Phone, Plus, ShieldCheck, Star, Trash2, UserRound, X } from 'lucide-react';
+import { PageHeader } from '@/components/app-shell';
+import { type EmergencyContact, useRideSimulation } from '@/lib/simulation';
+
+type ContactDraft = { name: string; phone: string; relation: string };
+const blank: ContactDraft = { name: '', phone: '', relation: '' };
+
+export function ContactsPage() {
+  const ride = useRideSimulation();
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<EmergencyContact | null>(null);
+  const [draft, setDraft] = useState<ContactDraft>(blank);
+  const startAdd = () => { setEditing(null); setDraft(blank); setOpen(true); };
+  const startEdit = (contact: EmergencyContact) => { setEditing(contact); setDraft({ name: contact.name, phone: contact.phone, relation: contact.relation }); setOpen(true); };
+  const submit = (event: React.FormEvent) => { event.preventDefault(); if (!draft.name.trim() || !draft.phone.trim()) return; if (editing) ride.editContact({ ...editing, ...draft }); else ride.addContact(draft); setOpen(false); };
+  return <div className="animate-rise">
+    <PageHeader eyebrow="Safety circle / emergency routing" title="People to call." lede="Keep the circle small, current, and ready for the one call that matters." action={<button className="button button-primary" onClick={startAdd} data-testid="button-add-contact"><Plus size={15} />Add contact</button>} />
+     <div className="panel panel-pad" style={{ display: 'flex', gap: 11, alignItems: 'start' }}><ShieldCheck size={19} /><div><div className="panel-title">Primary contact routing</div><div className="muted" style={{ fontSize: 11, lineHeight: 1.5, marginTop: 4 }}>SOS and crash alerts go to the contact marked primary first. You can change this any time.</div></div></div>
+    <div className="list-stack section-gap">
+      {ride.contacts.map((contact) => <article className="list-row" key={contact.id} data-testid={`row-contact-${contact.id}`}><div className={`avatar ${contact.isPrimary ? 'amber' : ''}`}><UserRound size={16} /></div><div className="row-main"><div className="row-name">{contact.name} {contact.isPrimary ? <span className="badge-primary"><Star size={9} style={{ verticalAlign: '-1px', marginRight: 3 }} />Primary</span> : null}</div><div className="row-detail"><Phone size={10} style={{ verticalAlign: '-1px', marginRight: 4 }} />{contact.phone} <span style={{ margin: '0 5px' }}>·</span>{contact.relation}</div></div><div className="row-actions">{!contact.isPrimary ? <button className="tiny-btn" title="Make primary" onClick={() => ride.makePrimary(contact.id)} data-testid={`button-primary-contact-${contact.id}`}><Star size={15} /></button> : <span className="tiny-btn" style={{ color: '#FF8A3D' }}><Check size={15} /></span>}<button className="tiny-btn" title="Edit contact" onClick={() => startEdit(contact)} data-testid={`button-edit-contact-${contact.id}`}><Edit3 size={15} /></button><button className="tiny-btn" title="Remove contact" onClick={() => { if (window.confirm(`Remove ${contact.name} from emergency contacts?`)) ride.removeContact(contact.id); }} data-testid={`button-remove-contact-${contact.id}`}><Trash2 size={15} /></button></div></article>)}
+      {!ride.contacts.length ? <div className="panel empty-state"><UserRound size={24} /><div>No emergency contacts yet.</div><button className="button button-primary" style={{ marginTop: 14 }} onClick={startAdd} data-testid="button-empty-add-contact">Add your first contact</button></div> : null}
+    </div>
+    {open ? <div className="modal-backdrop" role="presentation"><div className="modal" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title"><div className="modal-head"><div><div className="eyebrow">Safety circle</div><div className="modal-title" id="contact-modal-title">{editing ? 'Edit contact' : 'Add contact'}</div></div><button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close contact form" data-testid="button-close-contact-modal"><X size={16} /></button></div><form onSubmit={submit} className="form-grid"><div className="field"><label htmlFor="contact-name">Name</label><input id="contact-name" data-testid="input-contact-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Maya Chen" required /></div><div className="field"><label htmlFor="contact-phone">Phone number</label><input id="contact-phone" data-testid="input-contact-phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} placeholder="+1 (415) 555-0186" required /></div><div className="field"><label htmlFor="contact-relation">Relation</label><input id="contact-relation" data-testid="input-contact-relation" value={draft.relation} onChange={(e) => setDraft({ ...draft, relation: e.target.value })} placeholder="Partner, parent, friend" /></div><div className="modal-actions"><button type="button" className="button button-secondary" onClick={() => setOpen(false)} data-testid="button-cancel-contact">Cancel</button><button type="submit" className="button button-primary" data-testid="button-save-contact">{editing ? 'Save changes' : 'Add contact'}</button></div></form></div></div> : null}
+  </div>;
+}

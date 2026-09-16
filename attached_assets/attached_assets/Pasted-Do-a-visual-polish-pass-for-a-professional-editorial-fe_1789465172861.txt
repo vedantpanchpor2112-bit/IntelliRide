@@ -1,0 +1,37 @@
+Do a visual polish pass for a professional, editorial feel on the light
+theme — no new features, no layout restructuring.
+
+1. CARDS AND BORDERS: replace any drop-shadow under cards with a single
+   1px border (rgba(0,0,0,0.08)) instead. Don't use the same shadow/border
+   treatment on every card regardless of importance — a card showing a
+   warning state (low battery, BLE disconnected) can have a colored border;
+   everything else stays neutral and quiet.
+
+2. HIERARCHY THROUGH WEIGHT, NOT JUST COLOR: on white, color alone won't
+   separate important from secondary content clearly enough. The live speed
+   number should be significantly larger and heavier (bold, large size) than
+   anything else on the Track screen. Secondary metadata (timestamps,
+   "last updated", battery %) should use the dim text color AND a smaller
+   size — don't rely on color alone to signal it's secondary.
+
+3. WHITESPACE: increase breathing room between sections rather than packing
+   stat cards edge to edge — professional feels unhurried, not dense.
+
+4. RESTRAINT ON ACCENT COLOR: audit every place amber/cyan/red/green appear.
+   If an element isn't actively drawing attention to a state change (an
+   alert, a warning, live status), it should default to neutral black/grey
+   text, not tinted. Overusing the accent colors on things like labels or
+   icons that don't need attention makes it look busier and less considered.
+
+5. MOTION: same as before — only for things the user does (tab switches,
+   a new alert arriving, the crash countdown). A quick fade/slide, nothing
+   scattered or automatic.
+
+6. TYPOGRAPHY CHECK: confirm Space Grotesk is only used for the speed
+   readout and major headers — if it's showing up on small labels or body
+   text too, that dilutes its impact as the "important number" font.
+
+After each screen, check: does this look like a considered instrument panel,
+or does it look like a generic admin dashboard template with white cards and
+grey shadows? If it's the latter, strip decoration back further rather than
+adding more.

@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/intelliride-design-system/"
+title = "IntelliRide Companion Design System"
+description = "A reusable light-and-dark visual system for IntelliRide Companion, a mobile-first motorcycle safety and telemetry experience with restrained instrument-panel hierarchy."
+version = "1.0.0"
+id = "artifacts/intelliride-design-system"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/intelliride-design-system/" ]
+localPort = 20902
+
+[services.development]
+run = "pnpm --filter @workspace/intelliride-design-system run dev"
+
+[services.env]
+PORT = "20902"
+BASE_PATH = "/intelliride-design-system/"

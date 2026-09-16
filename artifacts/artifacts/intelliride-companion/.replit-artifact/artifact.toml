@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "IntelliRide Companion"
+description = "A mobile-first rider safety companion for a smart motorcycle helmet, with live location, telemetry simulation, alerts, emergency contacts, and family tracking."
+version = "1.0.0"
+id = "artifacts/intelliride-companion"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21316
+
+[services.development]
+run = "pnpm --filter @workspace/intelliride-companion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/intelliride-companion", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/intelliride-companion/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21316"
+BASE_PATH = "/"
