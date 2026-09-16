@@ -1,6 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getApps, initializeApp } from 'firebase/app';
-import { getDatabase, onValue, push, ref, set } from 'firebase/database';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
+import {
+  getApps,
+  initializeApp,
+} from 'firebase/app';
+
+import {
+  getDatabase,
+  onValue,
+  push,
+  ref,
+  set,
+} from 'firebase/database';
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 export type LocationFix = {
   lat: number;
@@ -25,7 +46,12 @@ export type RideStatus = {
 
 export type AlertRecord = {
   id: string;
-  type: 'sos' | 'overspeed' | 'crash' | 'connection' | 'battery';
+  type:
+    | 'sos'
+    | 'overspeed'
+    | 'crash'
+    | 'connection'
+    | 'battery';
   title: string;
   timestamp: string;
   sentTo: string[] | null;
@@ -47,7 +73,10 @@ export type FamilyMember = {
   initials: string;
   status: 'riding' | 'parked' | 'offline';
   speed: number;
-  location: { lat: number; lng: number };
+  location: {
+    lat: number;
+    lng: number;
+  };
   lastSeen: string;
   color: 'cyan' | 'amber' | 'green';
 };
@@ -64,8 +93,14 @@ export type SimulationState = {
   crashCountdown: number | null;
 };
 
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
 const STORAGE_KEY = 'intelliride-companion-v1';
+
 const riderId = 'demo-rider-1';
+
 const familyId = 'demo-family-1';
 
 const PUNE_CENTER = {
@@ -73,20 +108,26 @@ const PUNE_CENTER = {
   lng: 73.8175,
 };
 
+/* =========================================================
+   FIREBASE CONFIG
+========================================================= */
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  messagingSenderId:
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  databaseURL:
+    import.meta.env.VITE_FIREBASE_DATABASE_URL,
 };
 
 const firebaseConfigured = Boolean(
   firebaseConfig.apiKey &&
-  firebaseConfig.projectId &&
-  firebaseConfig.databaseURL
+    firebaseConfig.projectId &&
+    firebaseConfig.databaseURL,
 );
 
 const firebaseApp = firebaseConfigured
@@ -97,21 +138,40 @@ const firebaseDatabase = firebaseApp
   ? getDatabase(firebaseApp)
   : null;
 
-const nowIso = () => new Date().toISOString();
-
-const id = (prefix: string) =>
-  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+/* =========================================================
+   FIREBASE ALERT MAPPER
+========================================================= */
 
 const alertMap = (
-  value: Record<string, Omit<AlertRecord, 'id'>> | null
+  value: Record<string, Omit<AlertRecord, 'id'>> | null,
 ): AlertRecord[] =>
   Object.entries(value ?? {})
-    .map(([id, alert]) => ({ ...alert, id }))
-    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    .map(([id, alert]) => ({
+      ...alert,
+      id,
+    }))
+    .sort((a, b) =>
+      b.timestamp.localeCompare(a.timestamp),
+    );
 
 /* =========================================================
-   FIREBASE
-   ========================================================= */
+   FIREBASE ADAPTER
+========================================================= */
+
+/*
+ * The UI stays usable offline.
+ *
+ * When Firebase configuration is available:
+ *
+ * ESP32 / future hardware
+ *        ↓
+ * Firebase Realtime Database
+ *        ↓
+ * IntelliRide web app
+ *
+ * The same Firebase paths can later be used by
+ * the ESP32 + EC200-CN hardware integration.
+ */
 
 export const firebaseAdapter = {
   enabled: Boolean(firebaseDatabase),
@@ -121,116 +181,181 @@ export const firebaseAdapter = {
     : ('local' as const),
 
   sync: async (state: SimulationState) => {
-    if (!firebaseDatabase) return;
+    if (!firebaseDatabase) {
+      return;
+    }
 
     await Promise.all([
       set(
-        ref(firebaseDatabase, `riders/${riderId}/location`),
-        state.location
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/location`,
+        ),
+        state.location,
       ),
 
       set(
-        ref(firebaseDatabase, `riders/${riderId}/lastKnownLocation`),
-        state.lastKnownLocation
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/lastKnownLocation`,
+        ),
+        state.lastKnownLocation,
       ),
 
       set(
-        ref(firebaseDatabase, `riders/${riderId}/status`),
-        state.status
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/status`,
+        ),
+        state.status,
       ),
 
       set(
-        ref(firebaseDatabase, `riders/${riderId}/emergencyContacts`),
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/emergencyContacts`,
+        ),
         Object.fromEntries(
           state.contacts.map((contact) => [
             contact.id,
             contact,
-          ])
-        )
+          ]),
+        ),
       ),
 
       set(
-        ref(firebaseDatabase, `families/${familyId}/members`),
-        state.family.map((member) => member.id)
+        ref(
+          firebaseDatabase,
+          `families/${familyId}/members`,
+        ),
+        state.family.map((member) => member.id),
       ),
 
       set(
-        ref(firebaseDatabase, `riders/${riderId}/alerts`),
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/alerts`,
+        ),
         Object.fromEntries(
           state.alerts.map(({ id, ...alert }) => [
             id,
             alert,
-          ])
-        )
+          ]),
+        ),
       ),
     ]);
   },
 
   addAlert: async (alert: AlertRecord) => {
-    if (!firebaseDatabase) return;
+    if (!firebaseDatabase) {
+      return;
+    }
 
-    const { id: _id, ...payload } = alert;
+    const {
+      id: _id,
+      ...payload
+    } = alert;
 
     await set(
-      push(ref(firebaseDatabase, `riders/${riderId}/alerts`)),
-      payload
+      push(
+        ref(
+          firebaseDatabase,
+          `riders/${riderId}/alerts`,
+        ),
+      ),
+      payload,
     );
   },
 
   subscribe: (
-    onRemoteState: (patch: Partial<SimulationState>) => void
+    onRemoteState: (
+      patch: Partial<SimulationState>,
+    ) => void,
   ) => {
-    if (!firebaseDatabase) return () => undefined;
+    if (!firebaseDatabase) {
+      return () => undefined;
+    }
 
     const riderRoot = ref(
       firebaseDatabase,
-      `riders/${riderId}`
+      `riders/${riderId}`,
     );
 
-    return onValue(riderRoot, (snapshot) => {
-      const value = snapshot.val() as Record<string, unknown> | null;
+    const unsubscribe = onValue(
+      riderRoot,
+      (snapshot) => {
+        const value =
+          snapshot.val() as Record<
+            string,
+            unknown
+          > | null;
 
-      if (!value) return;
+        if (!value) {
+          return;
+        }
 
-      onRemoteState({
-        location: value.location as LocationFix | undefined,
+        onRemoteState({
+          location:
+            value.location as
+              | LocationFix
+              | undefined,
 
-        lastKnownLocation:
-          value.lastKnownLocation as LastKnownLocation | undefined,
+          lastKnownLocation:
+            value.lastKnownLocation as
+              | LastKnownLocation
+              | undefined,
 
-        status: value.status as RideStatus | undefined,
+          status:
+            value.status as
+              | RideStatus
+              | undefined,
 
-        contacts: value.emergencyContacts
-          ? Object.values(
-              value.emergencyContacts as Record<
-                string,
-                EmergencyContact
-              >
-            )
-          : undefined,
+          contacts: value.emergencyContacts
+            ? Object.values(
+                value.emergencyContacts as Record<
+                  string,
+                  EmergencyContact
+                >,
+              )
+            : undefined,
 
-        alerts: value.alerts
-          ? alertMap(
-              value.alerts as Record<
-                string,
-                Omit<AlertRecord, 'id'>
-              >
-            )
-          : undefined,
-      });
-    });
+          alerts: value.alerts
+            ? alertMap(
+                value.alerts as unknown as Record<
+                  string,
+                  Omit<AlertRecord, 'id'>
+                >,
+              )
+            : undefined,
+        });
+      },
+    );
+
+    return unsubscribe;
   },
 };
 
 /* =========================================================
-   DEFAULT STATE
-   ========================================================= */
+   HELPERS
+========================================================= */
+
+const nowIso = () =>
+  new Date().toISOString();
+
+const id = (prefix: string) =>
+  `${prefix}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+
+/* =========================================================
+   DEFAULT SIMULATION
+========================================================= */
 
 export const defaultSimulation: SimulationState = {
   location: {
     ...PUNE_CENTER,
-    speed: 0,
-    heading: 0,
+    speed: 58,
+    heading: 42,
     timestamp: nowIso(),
   },
 
@@ -243,9 +368,7 @@ export const defaultSimulation: SimulationState = {
     battery: 82,
     bleConnected: true,
     signalStrength: 76,
-
-    // IMPORTANT: Website starts parked
-    ridingState: 'parked',
+    ridingState: 'riding',
   },
 
   alerts: [
@@ -254,27 +377,29 @@ export const defaultSimulation: SimulationState = {
       type: 'connection',
       title: 'Helmet connected',
       timestamp: new Date(
-        Date.now() - 1000 * 60 * 18
+        Date.now() - 1000 * 60 * 18,
       ).toISOString(),
       sentTo: null,
       status: 'sent',
     },
+
     {
       id: 'alert-2',
       type: 'overspeed',
       title: 'Speed threshold crossed',
       timestamp: new Date(
-        Date.now() - 1000 * 60 * 47
+        Date.now() - 1000 * 60 * 47,
       ).toISOString(),
       sentTo: null,
       status: 'sent',
     },
+
     {
       id: 'alert-3',
       type: 'connection',
       title: 'GPS fix acquired',
       timestamp: new Date(
-        Date.now() - 1000 * 60 * 51
+        Date.now() - 1000 * 60 * 51,
       ).toISOString(),
       sentTo: null,
       status: 'sent',
@@ -289,6 +414,7 @@ export const defaultSimulation: SimulationState = {
       relation: 'Partner',
       isPrimary: true,
     },
+
     {
       id: 'contact-2',
       name: 'Jon Bell',
@@ -313,6 +439,7 @@ export const defaultSimulation: SimulationState = {
       lastSeen: 'Now',
       color: 'amber',
     },
+
     {
       id: 'family-2',
       name: 'Jon Bell',
@@ -327,6 +454,7 @@ export const defaultSimulation: SimulationState = {
       lastSeen: '6 min ago',
       color: 'green',
     },
+
     {
       id: 'family-3',
       name: 'Rina Bell',
@@ -344,133 +472,144 @@ export const defaultSimulation: SimulationState = {
   ],
 
   overspeedThreshold: 72,
+
   staleMode: false,
+
   crashCountdown: null,
 };
 
 /* =========================================================
-   LOAD STATE
-   ========================================================= */
+   LOAD SAVED STATE
+========================================================= */
 
 const loadState = (): SimulationState => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved =
+      localStorage.getItem(STORAGE_KEY);
 
     if (!saved) {
       return defaultSimulation;
     }
 
-    const parsed = JSON.parse(saved) as Partial<SimulationState>;
+    const parsed =
+      JSON.parse(saved) as Partial<SimulationState>;
 
-    const savedLocation =
-      parsed.location ?? defaultSimulation.location;
+    const legacyBayAreaLocation =
+      (parsed.location?.lng ?? 0) < 0;
 
     return {
       ...defaultSimulation,
+
       ...parsed,
 
-      // Always stop movement after page refresh
-      location: {
-        ...savedLocation,
-        speed: 0,
-        timestamp: nowIso(),
-      },
-
-      // NEVER restore riding state
-      status: {
-        ...(parsed.status ?? defaultSimulation.status),
-        ridingState: 'parked',
-      },
-
-      crashCountdown: null,
-      staleMode: false,
+      location: legacyBayAreaLocation
+        ? defaultSimulation.location
+        : parsed.location ??
+          defaultSimulation.location,
 
       lastKnownLocation:
-        parsed.lastKnownLocation ??
-        defaultSimulation.lastKnownLocation,
+        legacyBayAreaLocation
+          ? defaultSimulation.lastKnownLocation
+          : parsed.lastKnownLocation ??
+            defaultSimulation.lastKnownLocation,
+
+      family: legacyBayAreaLocation
+        ? defaultSimulation.family
+        : parsed.family ??
+          defaultSimulation.family,
 
       alerts: (
         parsed.alerts ??
         defaultSimulation.alerts
       ).map((alert) => ({
         ...alert,
+
         sentTo: Array.isArray(alert.sentTo)
           ? alert.sentTo
           : null,
+
         status:
           alert.status === 'cancelled'
             ? 'cancelled'
             : 'sent',
       })),
-
-      contacts:
-        parsed.contacts ??
-        defaultSimulation.contacts,
-
-      family:
-        parsed.family ??
-        defaultSimulation.family,
-
-      overspeedThreshold:
-        parsed.overspeedThreshold ??
-        defaultSimulation.overspeedThreshold,
     };
   } catch {
     return defaultSimulation;
   }
 };
 
-const persistState = (state: SimulationState) => {
+/* =========================================================
+   PERSIST STATE
+========================================================= */
+
+const persistState = (
+  state: SimulationState,
+) => {
   try {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify(state)
+      JSON.stringify(state),
     );
   } catch {
-    // Best effort
+    // Local persistence is best effort.
   }
 };
 
 /* =========================================================
-   RIDE SIMULATION
-   ========================================================= */
+   MAIN SIMULATION HOOK
+========================================================= */
 
 export function useRideSimulation() {
   const [state, setState] =
     useState<SimulationState>(loadState);
 
-  const [toast, setToast] = useState('');
+  const [toast, setToast] =
+    useState('');
 
-  const skipNextSync = useRef(false);
+  const skipNextSync =
+    useRef(false);
 
-  const lastBatteryAlert = useRef(false);
+  const lastBatteryAlert =
+    useRef(false);
 
-  const lastStaleMode = useRef(
-    defaultSimulation.staleMode
-  );
+  const lastBleState =
+    useRef(
+      defaultSimulation.status.bleConnected,
+    );
 
-  /* Firebase listener */
+  const lastStaleMode =
+    useRef(defaultSimulation.staleMode);
+
+  /* -------------------------------------------------------
+     Firebase subscription
+  ------------------------------------------------------- */
 
   useEffect(() => {
     const unsubscribe =
-      firebaseAdapter.subscribe((patch) => {
-        skipNextSync.current = true;
+      firebaseAdapter.subscribe(
+        (patch) => {
+          skipNextSync.current = true;
 
-        setState((current) => ({
-          ...current,
+          setState((current) => ({
+            ...current,
 
-          ...Object.fromEntries(
-            Object.entries(patch).filter(
-              ([, value]) => value !== undefined
-            )
-          ),
-        }));
-      });
+            ...Object.fromEntries(
+              Object.entries(patch).filter(
+                ([, value]) =>
+                  value !== undefined,
+              ),
+            ),
+          }));
+        },
+      );
 
     return unsubscribe;
   }, []);
 
-  /* Save state */
+  /* -------------------------------------------------------
+     Persist + Firebase sync
+  ------------------------------------------------------- */
 
   useEffect(() => {
     persistState(state);
@@ -483,169 +622,194 @@ export function useRideSimulation() {
     void firebaseAdapter.sync(state);
   }, [state]);
 
-  /* Toast */
+  /* -------------------------------------------------------
+     Toast timeout
+  ------------------------------------------------------- */
 
   useEffect(() => {
-    if (!toast) return;
+    if (!toast) {
+      return;
+    }
 
-    const timer = window.setTimeout(
-      () => setToast(''),
-      2400
-    );
+    const timer =
+      window.setTimeout(
+        () => setToast(''),
+        2400,
+      );
 
-    return () => window.clearTimeout(timer);
+    return () =>
+      window.clearTimeout(timer);
   }, [toast]);
 
-  /* =======================================================
-     TELEMETRY TICKER
-
-     Nothing moves while parked.
-     ======================================================= */
+  /* -------------------------------------------------------
+     Telemetry simulation
+  ------------------------------------------------------- */
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setState((current) => {
-        if (
-          current.staleMode ||
-          current.status.ridingState !== 'riding'
-        ) {
-          return current;
-        }
+    const timer =
+      window.setInterval(() => {
+        setState((current) => {
+          if (
+            current.staleMode ||
+            current.status.ridingState !==
+              'riding'
+          ) {
+            return current;
+          }
 
-        const nextSpeed = Math.max(
-          28,
-          Math.min(
-            84,
-            current.location.speed +
-              (Math.random() * 8 - 4)
-          )
-        );
+          const nextSpeed =
+            Math.max(
+              28,
+              Math.min(
+                84,
+                current.location.speed +
+                  (Math.random() * 8 - 4),
+              ),
+            );
 
-        const nextHeading =
-          (current.location.heading +
-            (Math.random() * 5 - 2.5) +
-            360) %
-          360;
+          const nextHeading =
+            (
+              current.location.heading +
+              (Math.random() * 5 - 2.5) +
+              360
+            ) % 360;
 
-        const nextLocation = {
-          ...current.location,
+          const nextLocation = {
+            ...current.location,
 
-          speed: Math.round(nextSpeed),
+            speed: Math.round(
+              nextSpeed,
+            ),
 
-          heading: Math.round(nextHeading),
+            heading: Math.round(
+              nextHeading,
+            ),
 
-          lat:
-            current.location.lat +
-            0.00008,
+            lat:
+              current.location.lat +
+              0.00008,
 
-          lng:
-            current.location.lng +
-            0.00004,
+            lng:
+              current.location.lng +
+              0.00004,
 
-          timestamp: nowIso(),
-        };
-
-        const overspeed =
-          nextSpeed >
-            current.overspeedThreshold &&
-          current.location.speed <=
-            current.overspeedThreshold;
-
-        const battery = Math.max(
-          8,
-          current.status.battery -
-            (Math.random() < 0.015 ? 1 : 0)
-        );
-
-        const batteryAlert =
-          battery < 20 &&
-          !lastBatteryAlert.current;
-
-        const bleConnected =
-          Math.random() > 0.012
-            ? current.status.bleConnected
-            : !current.status.bleConnected;
-
-        const bleChanged =
-          bleConnected !==
-          current.status.bleConnected;
-
-        lastBatteryAlert.current =
-          battery < 20;
-
-        const generatedAlerts: AlertRecord[] = [];
-
-        if (overspeed) {
-          generatedAlerts.push({
-            id: id('alert'),
-            type: 'overspeed',
-            title: 'Speed threshold crossed',
             timestamp: nowIso(),
-            sentTo: null,
-            status: 'sent',
-          });
-        }
+          };
 
-        if (batteryAlert) {
-          generatedAlerts.push({
-            id: id('alert'),
-            type: 'battery',
-            title: 'Battery below 20%',
-            timestamp: nowIso(),
-            sentTo: null,
-            status: 'sent',
-          });
-        }
+          const overspeed =
+            nextSpeed >
+              current.overspeedThreshold &&
+            current.location.speed <=
+              current.overspeedThreshold;
 
-        if (bleChanged) {
-          generatedAlerts.push({
-            id: id('alert'),
-            type: 'connection',
-            title: bleConnected
-              ? 'Helmet reconnected'
-              : 'Helmet disconnected',
-            timestamp: nowIso(),
-            sentTo: null,
-            status: 'sent',
-          });
-        }
+          const battery =
+            Math.max(
+              8,
+              current.status.battery -
+                (Math.random() < 0.015
+                  ? 1
+                  : 0),
+            );
 
-        return {
-          ...current,
+          const bleConnected =
+            Math.random() > 0.012
+              ? current.status.bleConnected
+              : !current.status.bleConnected;
 
-          location: nextLocation,
+          const bleChanged =
+            bleConnected !==
+            current.status.bleConnected;
 
-          lastKnownLocation: {
-            lat: nextLocation.lat,
-            lng: nextLocation.lng,
-            timestamp: nextLocation.timestamp,
-          },
+          lastBatteryAlert.current =
+            battery < 20;
 
-          status: {
-            ...current.status,
-            battery,
-            bleConnected,
-          },
+          lastBleState.current =
+            bleConnected;
 
-          alerts: generatedAlerts.length
-            ? [
-                ...generatedAlerts,
-                ...current.alerts,
-              ]
-            : current.alerts,
-        };
-      });
-    }, 1000);
+          const generatedAlerts: AlertRecord[] =
+            [];
 
-    return () => window.clearInterval(timer);
+          if (overspeed) {
+            generatedAlerts.push({
+              id: id('alert'),
+              type: 'overspeed',
+              title:
+                'Speed threshold crossed',
+              timestamp: nowIso(),
+              sentTo: null,
+              status: 'sent',
+            });
+          }
+
+          if (
+            battery < 20 &&
+            !lastBatteryAlert.current
+          ) {
+            generatedAlerts.push({
+              id: id('alert'),
+              type: 'battery',
+              title:
+                'Battery below 20%',
+              timestamp: nowIso(),
+              sentTo: null,
+              status: 'sent',
+            });
+          }
+
+          if (bleChanged) {
+            generatedAlerts.push({
+              id: id('alert'),
+              type: 'connection',
+              title: bleConnected
+                ? 'Helmet reconnected'
+                : 'Helmet disconnected',
+              timestamp: nowIso(),
+              sentTo: null,
+              status: 'sent',
+            });
+          }
+
+          return {
+            ...current,
+
+            location: nextLocation,
+
+            lastKnownLocation: {
+              lat: nextLocation.lat,
+              lng: nextLocation.lng,
+              timestamp:
+                nextLocation.timestamp,
+            },
+
+            status: {
+              ...current.status,
+              battery,
+              bleConnected,
+            },
+
+            alerts:
+              generatedAlerts.length
+                ? [
+                    ...generatedAlerts,
+                    ...current.alerts,
+                  ]
+                : current.alerts,
+          };
+        });
+      }, 1000);
+
+    return () =>
+      window.clearInterval(timer);
   }, []);
 
-  /* =======================================================
-     CRASH COUNTDOWN
-     ======================================================= */
+  /* -------------------------------------------------------
+     Crash countdown
+  ------------------------------------------------------- */
 
   useEffect(() => {
-    if (state.crashCountdown === null) {
+    if (
+      state.crashCountdown === null
+    ) {
       return;
     }
 
@@ -664,17 +828,19 @@ export function useRideSimulation() {
           {
             id: id('alert'),
             type: 'crash',
-            title: 'Crash alert sent',
+            title:
+              'Crash alert sent',
             timestamp: nowIso(),
-
-            sentTo: current.contacts
-              .filter(
-                (contact) => contact.isPrimary
-              )
-              .map(
-                (contact) => contact.id
-              ),
-
+            sentTo:
+              current.contacts
+                .filter(
+                  (contact) =>
+                    contact.isPrimary,
+                )
+                .map(
+                  (contact) =>
+                    contact.id,
+                ),
             status: 'sent',
           },
 
@@ -683,102 +849,124 @@ export function useRideSimulation() {
       }));
 
       setToast(
-        'Crash alert sent to your primary contact'
+        'Crash alert sent to your primary contact',
       );
 
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      setState((current) =>
-        current.crashCountdown === null
-          ? current
-          : {
-              ...current,
-              crashCountdown:
-                current.crashCountdown - 1,
-            }
-      );
-    }, 1000);
+    const timer =
+      window.setTimeout(
+        () =>
+          setState((current) =>
+            current.crashCountdown ===
+              null
+              ? current
+              : {
+                  ...current,
 
-    return () => window.clearTimeout(timer);
+                  crashCountdown:
+                    current.crashCountdown -
+                    1,
+                },
+          ),
+        1000,
+      );
+
+    return () =>
+      window.clearTimeout(timer);
   }, [state.crashCountdown]);
 
-  /* =======================================================
-     ACTIONS
-     ======================================================= */
+  /* -------------------------------------------------------
+     Generic update helper
+  ------------------------------------------------------- */
 
   const update = useCallback(
     (
       updater: (
-        current: SimulationState
-      ) => SimulationState
-    ) => setState(updater),
-    []
-  );
-
-  const setThreshold = useCallback(
-    (threshold: number) =>
-      update((current) => ({
-        ...current,
-        overspeedThreshold: threshold,
-      })),
-    [update]
-  );
-
-  const setStaleMode = useCallback(
-    (staleMode: boolean) => {
-      update((current) => ({
-        ...current,
-
-        staleMode,
-
-        location: staleMode
-          ? {
-              ...current.location,
-              timestamp: new Date(
-                Date.now() -
-                  1000 * 60 * 9
-              ).toISOString(),
-            }
-          : {
-              ...current.location,
-              timestamp: nowIso(),
-            },
-
-        alerts:
-          staleMode !== lastStaleMode.current
-            ? [
-                {
-                  id: id('alert'),
-                  type: 'connection',
-                  title: staleMode
-                    ? 'GPS signal lost'
-                    : 'GPS signal restored',
-                  timestamp: nowIso(),
-                  sentTo: null,
-                  status: 'sent',
-                },
-                ...current.alerts,
-              ]
-            : current.alerts,
-      }));
-
-      lastStaleMode.current = staleMode;
+        current: SimulationState,
+      ) => SimulationState,
+    ) => {
+      setState(updater);
     },
-    [update]
+    [],
   );
 
-  const triggerCrash = useCallback(() => {
-    update((current) => {
-      if (
-        current.status.ridingState !==
-        'riding'
-      ) {
-        return current;
-      }
+  /* -------------------------------------------------------
+     Speed threshold
+  ------------------------------------------------------- */
 
-      return {
+  const setThreshold =
+    useCallback(
+      (threshold: number) => {
+        update((current) => ({
+          ...current,
+          overspeedThreshold:
+            threshold,
+        }));
+      },
+      [update],
+    );
+
+  /* -------------------------------------------------------
+     GPS stale mode
+  ------------------------------------------------------- */
+
+  const setStaleMode =
+    useCallback(
+      (staleMode: boolean) => {
+        update((current) => ({
+          ...current,
+
+          staleMode,
+
+          location: staleMode
+            ? {
+                ...current.location,
+                timestamp:
+                  new Date(
+                    Date.now() -
+                      1000 * 60 * 9,
+                  ).toISOString(),
+              }
+            : {
+                ...current.location,
+                timestamp: nowIso(),
+              },
+
+          alerts:
+            staleMode !==
+            lastStaleMode.current
+              ? [
+                  {
+                    id: id('alert'),
+                    type: 'connection',
+                    title: staleMode
+                      ? 'GPS signal lost'
+                      : 'GPS signal restored',
+                    timestamp: nowIso(),
+                    sentTo: null,
+                    status: 'sent',
+                  },
+
+                  ...current.alerts,
+                ]
+              : current.alerts,
+        }));
+
+        lastStaleMode.current =
+          staleMode;
+      },
+      [update],
+    );
+
+  /* -------------------------------------------------------
+     Crash
+  ------------------------------------------------------- */
+
+  const triggerCrash =
+    useCallback(() => {
+      update((current) => ({
         ...current,
 
         status: {
@@ -787,350 +975,443 @@ export function useRideSimulation() {
         },
 
         crashCountdown: 10,
-      };
-    });
-  }, [update]);
+      }));
+    }, [update]);
 
-  const cancelCrash = useCallback(() => {
-    update((current) => ({
-      ...current,
+  /* -------------------------------------------------------
+     Cancel crash
+  ------------------------------------------------------- */
 
-      status: {
-        ...current.status,
-        ridingState: 'riding',
-      },
-
-      crashCountdown: null,
-
-      alerts: [
-        {
-          id: id('alert'),
-          type: 'crash',
-          title: 'Crash check cancelled',
-          timestamp: nowIso(),
-          sentTo: null,
-          status: 'cancelled',
-        },
-
-        ...current.alerts,
-      ],
-    }));
-
-    setToast('Crash check cancelled');
-  }, [update]);
-
-  const sendSos = useCallback(() => {
-    update((current) => ({
-      ...current,
-
-      alerts: [
-        {
-          id: id('alert'),
-          type: 'sos',
-          title: 'Manual SOS sent',
-          timestamp: nowIso(),
-
-          sentTo: current.contacts
-            .filter(
-              (contact) => contact.isPrimary
-            )
-            .map(
-              (contact) => contact.id
-            ),
-
-          status: 'sent',
-        },
-
-        ...current.alerts,
-      ],
-    }));
-
-    setToast(
-      'SOS sent to your emergency contacts'
-    );
-  }, [update]);
-
-  /* =======================================================
-     START RIDE
-     ======================================================= */
-
-  const startRide = useCallback(() => {
-    update((current) => ({
-      ...current,
-
-      staleMode: false,
-      crashCountdown: null,
-
-      location: {
-        ...current.location,
-
-        speed: 28,
-
-        timestamp: nowIso(),
-      },
-
-      status: {
-        ...current.status,
-        ridingState: 'riding',
-      },
-    }));
-
-    setToast('Ride started');
-  }, [update]);
-
-  /* =======================================================
-     END RIDE
-     ======================================================= */
-
-  const endRide = useCallback(() => {
-    update((current) => ({
-      ...current,
-
-      crashCountdown: null,
-
-      location: {
-        ...current.location,
-
-        speed: 0,
-
-        timestamp: nowIso(),
-      },
-
-      lastKnownLocation: {
-        lat: current.location.lat,
-        lng: current.location.lng,
-        timestamp: nowIso(),
-      },
-
-      status: {
-        ...current.status,
-        ridingState: 'parked',
-      },
-    }));
-
-    setToast('Ride ended');
-  }, [update]);
-
-  /* =======================================================
-     CONTACTS
-     ======================================================= */
-
-  const addContact = useCallback(
-    (
-      contact: Omit<
-        EmergencyContact,
-        'id' | 'isPrimary'
-      >
-    ) => {
+  const cancelCrash =
+    useCallback(() => {
       update((current) => ({
         ...current,
 
-        contacts: [
-          ...current.contacts,
+        status: {
+          ...current.status,
+          ridingState: 'riding',
+        },
 
+        crashCountdown: null,
+
+        alerts: [
           {
-            ...contact,
-            id: id('contact'),
-            isPrimary:
-              current.contacts.length === 0,
+            id: id('alert'),
+            type: 'crash',
+            title:
+              'Crash check cancelled',
+            timestamp: nowIso(),
+            sentTo: null,
+            status: 'cancelled',
           },
+
+          ...current.alerts,
         ],
       }));
 
-      setToast('Emergency contact added');
-    },
-    [update]
-  );
+      setToast(
+        'Crash check cancelled',
+      );
+    }, [update]);
 
-  const editContact = useCallback(
-    (contact: EmergencyContact) => {
+  /* -------------------------------------------------------
+     Manual SOS
+  ------------------------------------------------------- */
+
+  const sendSos =
+    useCallback(() => {
       update((current) => ({
         ...current,
 
-        contacts: current.contacts.map(
-          (item) =>
-            item.id === contact.id
-              ? contact
-              : item
-        ),
+        alerts: [
+          {
+            id: id('alert'),
+            type: 'sos',
+            title:
+              'Manual SOS sent',
+            timestamp: nowIso(),
+            sentTo:
+              current.contacts
+                .filter(
+                  (contact) =>
+                    contact.isPrimary,
+                )
+                .map(
+                  (contact) =>
+                    contact.id,
+                ),
+            status: 'sent',
+          },
+
+          ...current.alerts,
+        ],
       }));
 
-      setToast('Contact updated');
-    },
-    [update]
-  );
+      setToast(
+        'SOS sent to your emergency contacts',
+      );
+    }, [update]);
 
-  const removeContact = useCallback(
-    (contactId: string) => {
+  /* -------------------------------------------------------
+     Start ride
+  ------------------------------------------------------- */
+
+  const startRide =
+    useCallback(() => {
       update((current) => ({
         ...current,
 
-        contacts: current.contacts.filter(
-          (item) =>
-            item.id !== contactId
-        ),
+        staleMode: false,
+
+        crashCountdown: null,
+
+        location: {
+          ...current.location,
+          timestamp: nowIso(),
+        },
+
+        status: {
+          ...current.status,
+          ridingState: 'riding',
+        },
       }));
 
-      setToast('Contact removed');
-    },
-    [update]
-  );
+      setToast('Ride started');
+    }, [update]);
 
-  const makePrimary = useCallback(
-    (contactId: string) => {
+  /* -------------------------------------------------------
+     End ride
+  ------------------------------------------------------- */
+
+  const endRide =
+    useCallback(() => {
       update((current) => ({
         ...current,
 
-        contacts: current.contacts.map(
-          (item) => ({
-            ...item,
-            isPrimary:
-              item.id === contactId,
-          })
-        ),
+        crashCountdown: null,
+
+        location: {
+          ...current.location,
+          timestamp: nowIso(),
+        },
+
+        lastKnownLocation: {
+          lat: current.location.lat,
+          lng: current.location.lng,
+          timestamp: nowIso(),
+        },
+
+        status: {
+          ...current.status,
+          ridingState: 'parked',
+        },
       }));
 
-      setToast('Primary contact updated');
-    },
-    [update]
-  );
+      setToast('Ride ended');
+    }, [update]);
 
-  /* =======================================================
-     RESET DEMO
-     ======================================================= */
+  /* -------------------------------------------------------
+     Add emergency contact
+  ------------------------------------------------------- */
 
-  const resetDemo = useCallback(() => {
-    setState({
-      ...defaultSimulation,
+  const addContact =
+    useCallback(
+      (
+        contact: Omit<
+          EmergencyContact,
+          'id' | 'isPrimary'
+        >,
+      ) => {
+        update((current) => ({
+          ...current,
 
-      location: {
-        ...defaultSimulation.location,
-        speed: 0,
-        timestamp: nowIso(),
+          contacts: [
+            ...current.contacts,
+
+            {
+              ...contact,
+
+              id: id('contact'),
+
+              isPrimary:
+                current.contacts.length ===
+                0,
+            },
+          ],
+        }));
+
+        setToast(
+          'Emergency contact added',
+        );
       },
+      [update],
+    );
 
-      lastKnownLocation: {
-        ...defaultSimulation.lastKnownLocation,
-        timestamp: nowIso(),
+  /* -------------------------------------------------------
+     Edit emergency contact
+  ------------------------------------------------------- */
+
+  const editContact =
+    useCallback(
+      (
+        contact: EmergencyContact,
+      ) => {
+        update((current) => ({
+          ...current,
+
+          contacts:
+            current.contacts.map(
+              (item) =>
+                item.id === contact.id
+                  ? contact
+                  : item,
+            ),
+        }));
+
+        setToast(
+          'Contact updated',
+        );
       },
+      [update],
+    );
 
-      status: {
-        ...defaultSimulation.status,
-        ridingState: 'parked',
+  /* -------------------------------------------------------
+     Remove emergency contact
+  ------------------------------------------------------- */
+
+  const removeContact =
+    useCallback(
+      (contactId: string) => {
+        update((current) => ({
+          ...current,
+
+          contacts:
+            current.contacts.filter(
+              (item) =>
+                item.id !== contactId,
+            ),
+        }));
+
+        setToast(
+          'Contact removed',
+        );
       },
+      [update],
+    );
 
-      crashCountdown: null,
-      staleMode: false,
-    });
+  /* -------------------------------------------------------
+     Make primary contact
+  ------------------------------------------------------- */
 
-    setToast('Demo data reset');
-  }, []);
+  const makePrimary =
+    useCallback(
+      (contactId: string) => {
+        update((current) => ({
+          ...current,
 
-  /* =======================================================
-     FAMILY
-     ======================================================= */
+          contacts:
+            current.contacts.map(
+              (item) => ({
+                ...item,
 
-  const tickFamily = useCallback(
-    () =>
+                isPrimary:
+                  item.id ===
+                  contactId,
+              }),
+            ),
+        }));
+
+        setToast(
+          'Primary contact updated',
+        );
+      },
+      [update],
+    );
+
+  /* -------------------------------------------------------
+     Reset demo
+  ------------------------------------------------------- */
+
+  const resetDemo =
+    useCallback(() => {
+      setState(defaultSimulation);
+      setToast('Demo data reset');
+    }, []);
+
+  /* -------------------------------------------------------
+     Family simulation
+  ------------------------------------------------------- */
+
+  const tickFamily =
+    useCallback(() => {
       update((current) => ({
         ...current,
 
-        family: current.family.map(
-          (member) =>
-            member.status === 'riding'
-              ? {
-                  ...member,
+        family:
+          current.family.map(
+            (member) =>
+              member.status ===
+              'riding'
+                ? {
+                    ...member,
 
-                  speed: Math.max(
-                    20,
-                    Math.min(
-                      60,
-                      member.speed +
-                        Math.round(
-                          Math.random() * 8 - 4
-                        )
-                    )
-                  ),
+                    speed: Math.max(
+                      20,
+                      Math.min(
+                        60,
+                        member.speed +
+                          Math.round(
+                            Math.random() *
+                              8 -
+                              4,
+                          ),
+                      ),
+                    ),
 
-                  lastSeen: 'Now',
-                }
-              : member
-        ),
-      })),
-    [update]
-  );
+                    lastSeen: 'Now',
+                  }
+                : member,
+          ),
+      }));
+    }, [update]);
 
-  const adapterLabel = useMemo(
-    () =>
-      firebaseConfigured
-        ? 'Firebase adapter ready'
-        : 'Local simulation',
-    []
-  );
+  /* -------------------------------------------------------
+     Adapter label
+  ------------------------------------------------------- */
+
+  const adapterLabel =
+    useMemo(
+      () =>
+        firebaseConfigured
+          ? 'Firebase adapter ready'
+          : 'Local simulation',
+      [],
+    );
+
+  /* -------------------------------------------------------
+     RETURN
+  ------------------------------------------------------- */
 
   return {
     ...state,
 
     toast,
+
     adapterLabel,
 
     setThreshold,
+
     setStaleMode,
 
     triggerCrash,
+
     cancelCrash,
 
     sendSos,
 
     startRide,
+
     endRide,
 
     addContact,
+
     editContact,
+
     removeContact,
+
     makePrimary,
 
     resetDemo,
+
     tickFamily,
   };
 }
 
 /* =========================================================
-   TIME HELPERS
-   ========================================================= */
+   DATE / TIME FORMATTERS
+========================================================= */
 
-const INDIA_TIME_ZONE = 'Asia/Kolkata';
+/*
+ * All displayed dates and times use
+ * India Standard Time.
+ */
+
+const INDIA_TIME_ZONE =
+  'Asia/Kolkata';
+
+/* Current time: 10:42:31 AM */
 
 export const formatTime = (
-  timestamp: string
+  timestamp: string,
 ) =>
-  new Intl.DateTimeFormat('en-IN', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: INDIA_TIME_ZONE,
-  }).format(new Date(timestamp));
+  new Intl.DateTimeFormat(
+    'en-IN',
+    {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone:
+        INDIA_TIME_ZONE,
+    },
+  ).format(
+    new Date(timestamp),
+  );
+
+/* Current date: 16 Sep 2026 */
+
+export const formatDate = (
+  timestamp: string,
+) =>
+  new Intl.DateTimeFormat(
+    'en-IN',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone:
+        INDIA_TIME_ZONE,
+    },
+  ).format(
+    new Date(timestamp),
+  );
+
+/* Date + time: 16 Sep 2026, 10:42:31 AM */
 
 export const formatDateTime = (
-  timestamp: string
+  timestamp: string,
 ) =>
-  new Intl.DateTimeFormat('en-IN', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: INDIA_TIME_ZONE,
-  }).format(new Date(timestamp));
+  new Intl.DateTimeFormat(
+    'en-IN',
+    {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone:
+        INDIA_TIME_ZONE,
+    },
+  ).format(
+    new Date(timestamp),
+  );
+
+/* Relative time: Just now / 1 min ago / 5 min ago */
 
 export const relativeTime = (
-  timestamp: string
+  timestamp: string,
 ) => {
   const mins = Math.max(
     0,
     Math.round(
       (Date.now() -
-        new Date(timestamp).getTime()) /
-        60000
-    )
+        new Date(
+          timestamp,
+        ).getTime()) /
+        60000,
+    ),
   );
 
   return mins < 1
