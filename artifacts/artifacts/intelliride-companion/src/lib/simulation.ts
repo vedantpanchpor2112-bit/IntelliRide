@@ -71,7 +71,7 @@ export type FamilyMember = {
   name: string;
   relation: string;
   initials: string;
-  status: 'riding' | 'parked' | 'offline';
+  status: 'riding' | 'parked' | 'offline' | 'crash';
   speed: number;
   location: {
     lat: number;
@@ -122,7 +122,11 @@ const PUNE_CENTER = {
  */
 
 const hardwareMode =
-  import.meta.env.VITE_HARDWARE_MODE === 'true';
+  ['true', '1', 'production', 'hardware'].includes(
+    String(import.meta.env.VITE_HARDWARE_MODE)
+      .trim()
+      .toLowerCase(),
+  );
 
 /* =========================================================
    FIREBASE CONFIG
@@ -369,86 +373,111 @@ export const firebaseAdapter = {
   /*
    * Listen to Firebase in real time.
    */
-  subscribe: (
-    onRemoteState: (
-      patch: Partial<SimulationState>,
-    ) => void,
-  ): (() => void) => {
-    if (!firebaseDatabase) {
-      return () => undefined;
-    }
+ subscribe: (onRemoteState: (patch: Partial<SimulationState>) => void) => {
+  if (!firebaseDatabase) return () => undefined;
 
-    const riderRoot = ref(
-      firebaseDatabase,
-      `riders/${RIDER_ID}`,
-    );
+  const riderRoot = ref(
+    firebaseDatabase,
+    `riders/${RIDER_ID}`,
+  );
 
-    const unsubscribe =
-      onValue(
-        riderRoot,
-        (snapshot) => {
-          const value =
-            snapshot.val() as
-              | Record<
-                  string,
-                  unknown
-                >
-              | null;
+  const unsubscribe = onValue(
+    riderRoot,
+    (snapshot) => {
+      const value =
+        snapshot.val() as Record<string, unknown> | null;
 
-          if (!value) {
-            return;
-          }
+      if (!value) return;
 
-          const patch: Partial<SimulationState> =
-            {};
+      const rawLocation =
+        value.location as
+          | Partial<LocationFix>
+          | null
+          | undefined;
 
-          if (value.location) {
-            patch.location =
-              value.location as LocationFix;
-          }
+      const remoteLocation: LocationFix | undefined =
+        rawLocation &&
+        Number.isFinite(Number(rawLocation.lat)) &&
+        Number.isFinite(Number(rawLocation.lng))
+          ? {
+              lat: Number(rawLocation.lat),
+              lng: Number(rawLocation.lng),
+              speed: Number.isFinite(Number(rawLocation.speed))
+                ? Number(rawLocation.speed)
+                : 0,
+              heading: Number.isFinite(Number(rawLocation.heading))
+                ? Number(rawLocation.heading)
+                : 0,
+              timestamp:
+                typeof rawLocation.timestamp === 'string'
+                  ? rawLocation.timestamp
+                  : nowIso(),
+            }
+          : undefined;
 
-          if (
-            value.lastKnownLocation
-          ) {
-            patch.lastKnownLocation =
-              value.lastKnownLocation as LastKnownLocation;
-          }
+      const remoteStatus =
+        value.status as RideStatus | undefined;
 
-          if (value.status) {
-            patch.status =
-              value.status as RideStatus;
-          }
+      const familyPatch: FamilyMember[] | undefined =
+        remoteLocation && remoteStatus
+          ? [
+              {
+                id: 'family-1',
+                name: 'Maya Chen',
+                relation: 'Partner',
+                initials: 'MC',
+                status:
+                  remoteStatus.ridingState === 'crash'
+                    ? 'crash'
+                    : remoteStatus.ridingState === 'riding'
+                      ? 'riding'
+                      : 'parked',
+                speed: Math.round(
+                  remoteLocation.speed ?? 0,
+                ),
+                location: {
+                  lat: remoteLocation.lat,
+                  lng: remoteLocation.lng,
+                },
+                lastSeen: 'Now',
+                color: 'amber',
+              },
+            ]
+          : undefined;
 
-          if (
-            value.emergencyContacts
-          ) {
-            patch.contacts =
-              Object.values(
-                value.emergencyContacts as Record<
-                  string,
-                  EmergencyContact
-                >,
-              );
-          }
+      onRemoteState({
+        location: remoteLocation,
 
-          if (value.alerts) {
-            patch.alerts =
-              parseAlerts(
-                value.alerts as Record<
-                  string,
-                  Omit<
-                    AlertRecord,
-                    'id'
-                  >
-                >,
-              );
-          }
+        lastKnownLocation:
+          value.lastKnownLocation as
+            | LastKnownLocation
+            | undefined,
 
-          onRemoteState(patch);
-        },
-      );
+        status: remoteStatus,
 
-    return unsubscribe;
+        contacts: value.emergencyContacts
+          ? Object.values(
+              value.emergencyContacts as Record<
+                string,
+                EmergencyContact
+              >,
+            )
+          : undefined,
+
+       alerts: value.alerts
+  ? parseAlerts(
+      value.alerts as unknown as Record<
+        string,
+        Omit<AlertRecord, 'id'>
+      >,
+    )
+  : undefined,
+        family: familyPatch,
+      });
+    },
+  );
+
+  return unsubscribe;
   },
 };
 
